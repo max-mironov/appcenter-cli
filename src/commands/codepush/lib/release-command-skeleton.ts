@@ -113,7 +113,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       fs.stat(updateContentsZipPath, function(error, stat) {
         if (error) { throw error; }
         
-        helper.upload(fs.createReadStream(updateContentsZipPath), stat.size);
+        helper.upload(updateContentsZipPath, stat.size);
       }); 
 
       await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {

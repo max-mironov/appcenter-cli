@@ -3,7 +3,7 @@ import { InflightModelChunk, IUploadStatus, IFullUploadData, IFileUploadSreviceR
   FileUploadServiceState, IProgress, IUploadStats, IUploadData, MessageLevel } from "./file-upload-service-script-data";
 
   export interface CustomFile {
-    fileStream: fs.ReadStream,
+    fileName: string,
     size: number,
     name: string
   }
@@ -13,6 +13,9 @@ import { InflightModelChunk, IUploadStatus, IFullUploadData, IFileUploadSreviceR
 
 const urlParse = require('url-parse');
 import * as fs from "fs";
+import { each } from "async";
+
+var toBlob = require('stream-to-blob')
 var slice = require('stream-slice').slice;
 
 const failToUploadMsg = 'The asset cannot be uploaded. Try creating a new one';
@@ -198,7 +201,7 @@ export class FileUploadServiceScript {
     // Otherwise just start processing and uploading the chunk
     const start = (chunkToSend - 1) * this.uploadData.chunkSize;
     const end = Math.min(chunkToSend * this.uploadData.chunkSize, this.uploadData.file.size);
-    const chunk = this.uploadData.file.fileStream.pipe(slice(start, end));
+    const chunk = fs.createReadStream(this.uploadData.file.fileName, {start: start, end: end});
     const url = uploadBaseUrls.UploadChunk + this.uploadData.assetId + '?blockNumber=' + chunkToSend + '&token=' + this.uploadData.token;
 
     worker.postMessage({ Chunk: chunk, ChunkNumber: chunkToSend, Url: url, CorrelationId: this.uploadData.correlationId, CorrelationVector: this.uploadData.correlationVector });
@@ -632,7 +635,11 @@ export class FileUploadServiceScript {
 
     if (requestOptions.chunk) {
       xhr.setRequestHeader("Content-Type", "application/x-binary");
-      xhr.send(requestOptions.chunk);
+      // Uint8Array.from(requestOptions.chunk).buffer;
+
+      // Buffer.from(Uint8Array.from(requestOptions.chunk).buffer);
+
+      xhr.send(Buffer.from(Uint8Array.from(requestOptions.chunk).buffer));
     } else {
       xhr.send();
     }
@@ -746,7 +753,7 @@ export class FileUploadServiceScript {
     }
   }
 
-  protected uploadChunk(chunk: Blob, chunkNumber: number) {
+  protected uploadChunk(chunk: any, chunkNumber: number) {
     this.sendRequest({
       method: 'POST',
       async: true,
@@ -811,9 +818,19 @@ export class FileUploadServiceScript {
     // Otherwise just start processing and uploading the chunk
     const start = (chunkNumber - 1) * this.uploadData.chunkSize;
     const end = Math.min(chunkNumber * this.uploadData.chunkSize, this.uploadData.file.size);
-    const chunk = this.uploadData.file.fileStream.pipe(slice(start, end));
+    const chunk = fs.createReadStream(this.uploadData.file.fileName, {start: start, end: end});
 
-    this.uploadChunk(chunk, chunkNumber);
+    var buffers: any = [];
+    chunk.on('data', function(buffer: any) {
+      buffers.push(buffer);
+    });
+    chunk.on('end', () => {
+      var buffer = Buffer.concat(buffers);
+      this.uploadChunk(buffer, chunkNumber);
+    });
+
+
+    // this.uploadChunk(chunk, chunkNumber);
   }
 
   public start(file: CustomFile): void {

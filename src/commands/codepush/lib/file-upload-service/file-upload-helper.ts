@@ -27,7 +27,7 @@ export interface IUploadData {
 }
 
 export interface CustomFile {
-  fileStream: fs.ReadStream,
+  fileName: string,
   size: number,
   name: string
 }
@@ -84,8 +84,8 @@ export default class FileUploadHelper {
 
   }
 
-  public async upload(file: fs.ReadStream, fileSize: number): Promise<void> {
-    this.file = {fileStream: file,
+  public async upload(fileName: string, fileSize: number): Promise<void> {
+    this.file = {fileName: fileName,
                 size: fileSize,
                 name: "123-random-file-name-test"};
 
