@@ -5,7 +5,7 @@ import { InflightModelChunk, IUploadStatus, IFullUploadData, IFileUploadSreviceR
   export interface CustomFile {
     fileName: string,
     size: number,
-    name: string
+    arrayBuffer: Buffer
   }
 
   var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
@@ -14,9 +14,7 @@ import { InflightModelChunk, IUploadStatus, IFullUploadData, IFileUploadSreviceR
 const urlParse = require('url-parse');
 import * as fs from "fs";
 import { each } from "async";
-
-var toBlob = require('stream-to-blob')
-var slice = require('stream-slice').slice;
+import { Buffer } from "buffer";
 
 const failToUploadMsg = 'The asset cannot be uploaded. Try creating a new one';
 
@@ -532,7 +530,7 @@ export class FileUploadServiceScript {
   protected setMetadata() {
 
     this.log(`Setting metadata for AssetId:  ${this.uploadData.assetId}`);
-    this.log(`File name: ${this.uploadData.file.name}`);
+    this.log(`File name: ${this.uploadData.file.fileName}`);
     this.log(`File size: ${this.uploadData.file.size}`);
     this.log(`CorrelationId: ${this.uploadData.correlationId}`);
     this.message('Setting asset metadata on server');
@@ -541,13 +539,13 @@ export class FileUploadServiceScript {
       method: "POST",
       async: true,
       useAuthentication: true,
-      url: uploadBaseUrls.SetMetadata + encodeURIComponent(this.uploadData.assetId) + '?file_name=' + encodeURIComponent(this.uploadData.file.name) + '&file_Size=' + encodeURIComponent(this.uploadData.file.size.toString()),
+      url: uploadBaseUrls.SetMetadata + encodeURIComponent(this.uploadData.assetId) + '?file_name=' + encodeURIComponent(this.uploadData.file.fileName) + '&file_Size=' + encodeURIComponent(this.uploadData.file.size.toString()),
       onError: (event: any, errorMessage: string) => {
         this.log(`Set metadata failed: AssetId: ${this.uploadData.assetId} StatusCode: ${event.currentTarget.status} errorMessage ${errorMessage}`);
         this.error(failToUploadMsg, {
           message: 'Set metadata failed',
           errorMessage: errorMessage ? errorMessage : 'none',
-          fileName: this.uploadData.file.name,
+          fileName: this.uploadData.file.fileName,
           fileSize: this.uploadData.file.size,
           eventStatusCode: event.currentTarget && event.currentTarget.status ? event.currentTarget.status : 'none'          
         });
@@ -635,11 +633,7 @@ export class FileUploadServiceScript {
 
     if (requestOptions.chunk) {
       xhr.setRequestHeader("Content-Type", "application/x-binary");
-      // Uint8Array.from(requestOptions.chunk).buffer;
-
-      // Buffer.from(Uint8Array.from(requestOptions.chunk).buffer);
-
-      xhr.send(Buffer.from(Uint8Array.from(requestOptions.chunk).buffer));
+      xhr.send(requestOptions.chunk);
     } else {
       xhr.send();
     }
@@ -818,19 +812,20 @@ export class FileUploadServiceScript {
     // Otherwise just start processing and uploading the chunk
     const start = (chunkNumber - 1) * this.uploadData.chunkSize;
     const end = Math.min(chunkNumber * this.uploadData.chunkSize, this.uploadData.file.size);
-    const chunk = fs.createReadStream(this.uploadData.file.fileName, {start: start, end: end});
+    // const chunk = fs.createReadStream(this.uploadData.file.fileName, {start: start, end: end});
+    const chunk = this.uploadData.file.arrayBuffer.slice(start, end);
 
-    var buffers: any = [];
-    chunk.on('data', function(buffer: any) {
-      buffers.push(buffer);
-    });
-    chunk.on('end', () => {
-      var buffer = Buffer.concat(buffers);
-      this.uploadChunk(buffer, chunkNumber);
-    });
+    // var buffers: any = [];
+    // chunk.on('data', function(buffer: any) {
+    //   buffers.push(buffer);
+    // });
+    // chunk.on('end', () => {
+    //   var buffer = Buffer.concat(buffers);
+    //   this.uploadChunk(buffer, chunkNumber);
+    // });
 
 
-    // this.uploadChunk(chunk, chunkNumber);
+    this.uploadChunk(chunk, chunkNumber);
   }
 
   public start(file: CustomFile): void {

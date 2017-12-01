@@ -139,9 +139,9 @@ export default class CodePushReleaseReactCommand extends CodePushReleaseCommandS
     }
 
     try {
-      createEmptyTmpReleaseFolder(this.updateContentsPath);
-      removeReactTmpDir();
-      await runReactNativeBundleCommand(this.bundleName, this.development, this.entryFile, this.updateContentsPath, this.os, this.sourcemapOutput);
+      // createEmptyTmpReleaseFolder(this.updateContentsPath);
+      // removeReactTmpDir();
+      // await runReactNativeBundleCommand(this.bundleName, this.development, this.entryFile, this.updateContentsPath, this.os, this.sourcemapOutput);
 
       out.text(chalk.cyan("\nReleasing update contents to CodePush:\n"));
 
@@ -150,7 +150,7 @@ export default class CodePushReleaseReactCommand extends CodePushReleaseCommandS
       debug(`Failed to release a CodePush update - ${inspect(error)}`);
       return failure(ErrorCodes.Exception, "Failed to release a CodePush update.")
     } finally {
-      await pfs.rmDir(this.updateContentsPath);
+      // await pfs.rmDir(this.updateContentsPath);
     }
   }
 }

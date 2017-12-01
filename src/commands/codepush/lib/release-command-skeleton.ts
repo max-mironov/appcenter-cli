@@ -101,28 +101,39 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       await sign(this.privateKeyPath, this.updateContentsPath);
     }
 
-    const updateContentsZipPath = await zip(this.updateContentsPath);
-
+    // const updateContentsZipPath = await zip(this.updateContentsPath);
+    let updateContentsZipPath = "/Users/max-mironov/Documents/max-mironov/examples/ReactNativeIos/3oqu1M4uTBS0mVz.zip";
     try {
       const app = this.app;
       const serverUrl = environments(this.environmentName || getUser().environment).managementEndpoint;
       const token = this.token || await getUser().accessToken;
-      
-      const helper = new UploadHelper(client, app);
 
+      const helper = new UploadHelper(client, app);
+    
       fs.stat(updateContentsZipPath, function(error, stat) {
         if (error) { throw error; }
-        
-        helper.upload(updateContentsZipPath, stat.size);
+
+        const testFileName = "test-file-upload";
+        let buffer: Buffer;
+
+        let fileStream = fs.createReadStream(updateContentsZipPath);
+        let buffers: any = [];
+        fileStream.on('data', function(buffer: any) {
+          buffers.push(buffer);
+        });
+        fileStream.on('end', () => {
+          var buffer = Buffer.concat(buffers);
+          helper.upload({fileName: testFileName, size: stat.size, arrayBuffer: buffer});
+        });    
       }); 
 
-      await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {
-        appVersion: this.targetBinaryVersion,
-        description: this.description,
-        isDisabled: this.disabled,
-        isMandatory: this.mandatory,
-        rollout: this.rollout
-      }, token, serverUrl));
+      // await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {
+      //   appVersion: this.targetBinaryVersion,
+      //   description: this.description,
+      //   isDisabled: this.disabled,
+      //   isMandatory: this.mandatory,
+      //   rollout: this.rollout
+      // }, token, serverUrl));
      
       out.text(`Successfully released an update containing the "${this.updateContentsPath}" `
         + `${fs.lstatSync(this.updateContentsPath).isDirectory() ? "directory" : "file"}`
@@ -133,7 +144,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       debug(`Failed to release a CodePush update - ${inspect(error)}`);
       return failure(ErrorCodes.Exception, error.response ? error.response.body : error);
     } finally {
-      await pfs.rmDir(updateContentsZipPath);
+      //await pfs.rmDir(updateContentsZipPath);
     }
   }
 

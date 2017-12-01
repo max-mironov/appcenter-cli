@@ -29,7 +29,7 @@ export interface IUploadData {
 export interface CustomFile {
   fileName: string,
   size: number,
-  name: string
+  arrayBuffer: Buffer
 }
 
 export interface ClientResponse<T> {
@@ -84,13 +84,10 @@ export default class FileUploadHelper {
 
   }
 
-  public async upload(fileName: string, fileSize: number): Promise<void> {
-    this.file = {fileName: fileName,
-                size: fileSize,
-                name: "123-random-file-name-test"};
+  public async upload(file: CustomFile): Promise<void> {
+    this.file = file;
 
     const path = this.createAssetPath();
-    debugger;
     //TODO: POST to current path and get public asset .then()...
     const httpRequest: any = await clientRequest<models.FileAsset> ((cb) => 
       this.client.appOperations.postFileAsset(this.app.ownerName, this.app.appName, cb)).catch((error: any) => {
