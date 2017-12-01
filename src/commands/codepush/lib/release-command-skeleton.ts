@@ -13,6 +13,8 @@ import { environments } from "../lib/environment";
 import { isValidVersion, isValidRollout, isValidDeployment } from "../lib/validation-utils";
 import { AppCenterCodePushRelease, LegacyCodePushRelease }  from "../lib/release-strategy/index";
 
+import UploadHelper from "../lib/file-upload-service/file-upload-helper";
+
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
 
 export interface ReleaseStrategy {
@@ -106,6 +108,14 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       const serverUrl = environments(this.environmentName || getUser().environment).managementEndpoint;
       const token = this.token || await getUser().accessToken;
       
+      const helper = new UploadHelper(client, app);
+
+      fs.stat(updateContentsZipPath, function(error, stat) {
+        if (error) { throw error; }
+        
+        helper.upload(fs.createReadStream(updateContentsZipPath), stat.size);
+      }); 
+
       await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {
         appVersion: this.targetBinaryVersion,
         description: this.description,
