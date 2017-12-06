@@ -8,7 +8,7 @@ import * as pfs from "../../util/misc/promisfied-fs";
 import * as chalk from "chalk";
 import * as path from "path";
 import { fileDoesNotExistOrIsDirectory, createEmptyTmpReleaseFolder, removeReactTmpDir } from "./lib/file-utils";
-import { isValidVersion, isValidDeployment } from "./lib/validation-utils";
+import { isValidRange, isValidDeployment } from "./lib/validation-utils";
 import { VersionSearchParams, getReactNativeProjectAppVersion, runReactNativeBundleCommand, isValidOS, isValidPlatform, isReactNativeProject } from "./lib/react-native-utils";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-react");
@@ -126,7 +126,7 @@ export default class CodePushReleaseReactCommand extends CodePushReleaseCommandS
 
     this.targetBinaryVersion = this.specifiedTargetBinaryVersion;
 
-    if (this.targetBinaryVersion && !isValidVersion(this.targetBinaryVersion)) {
+    if (this.targetBinaryVersion && !isValidRange(this.targetBinaryVersion)) {
       return failure(ErrorCodes.InvalidParameter, "Invalid binary version(s) for a release.");
     } else if (!this.targetBinaryVersion) {
       const versionSearchParams: VersionSearchParams = {
@@ -150,7 +150,9 @@ export default class CodePushReleaseReactCommand extends CodePushReleaseCommandS
       debug(`Failed to release a CodePush update - ${inspect(error)}`);
       return failure(ErrorCodes.Exception, "Failed to release a CodePush update.")
     } finally {
-      // await pfs.rmDir(this.updateContentsPath);
+      if (!this.outputDir) {
+        await pfs.rmDir(this.updateContentsPath);
+      }
     }
   }
 }
