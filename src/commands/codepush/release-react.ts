@@ -139,9 +139,9 @@ export default class CodePushReleaseReactCommand extends CodePushReleaseCommandS
     }
 
     try {
-      // createEmptyTmpReleaseFolder(this.updateContentsPath);
-      // removeReactTmpDir();
-      // await runReactNativeBundleCommand(this.bundleName, this.development, this.entryFile, this.updateContentsPath, this.os, this.sourcemapOutput);
+      createEmptyTmpReleaseFolder(this.updateContentsPath);
+      removeReactTmpDir();
+      await runReactNativeBundleCommand(this.bundleName, this.development, this.entryFile, this.updateContentsPath, this.os, this.sourcemapOutput);
 
       out.text(chalk.cyan("\nReleasing update contents to CodePush:\n"));
 

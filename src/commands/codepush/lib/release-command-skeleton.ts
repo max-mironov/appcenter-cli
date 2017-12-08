@@ -5,6 +5,7 @@ import { out, prompt } from "../../../util/interaction";
 import { getUser, DefaultApp } from "../../../util/profile/index";
 import { inspect } from "util";
 import * as fs from "fs";
+import * as path from "path";
 import * as pfs from "../../../util/misc/promisfied-fs";
 import * as chalk from "chalk";
 import { sign, zip } from "../lib/update-contents-tasks";
@@ -12,8 +13,7 @@ import { isBinaryOrZip } from "../lib/file-utils";
 import { environments } from "../lib/environment";
 import { isValidRange, isValidRollout, isValidDeployment } from "../lib/validation-utils";
 import { AppCenterCodePushRelease, LegacyCodePushRelease }  from "../lib/release-strategy/index";
-
-import UploadHelper from "../lib/file-upload-service/file-upload-helper";
+import AcfusClient from "acfus-client";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
 
@@ -101,39 +101,51 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       await sign(this.privateKeyPath, this.updateContentsPath);
     }
 
-    // const updateContentsZipPath = await zip(this.updateContentsPath);
-    let updateContentsZipPath = "/Users/max-mironov/Documents/max-mironov/examples/ReactNativeIos/3oqu1M4uTBS0mVz.zip";
+    const updateContentsZipPath = await zip(this.updateContentsPath);
     try {
       const app = this.app;
       const serverUrl = environments(this.environmentName || getUser().environment).managementEndpoint;
       const token = this.token || await getUser().accessToken;
 
-      const helper = new UploadHelper(client, app);
-    
-      fs.stat(updateContentsZipPath, function(error, stat) {
-        if (error) { throw error; }
+      const uploadPromise = async () => {
+          return new Promise<string>((resolve, reject) => {
+            const uploadClient = new AcfusClient({
+              token: token,
+              appName: app.appName,
+              ownerName: app.ownerName,
+              onCompleted: (data: any) => {
+                console.log(data.downloadUrl);
+                return resolve(data.downloadUrl);
+              },
+              onProgressChanged: (progress: any) => {
+                console.log(progress.percentCompleted);
+              },
+              onMessage: (message: any, messageLevel: any) => {
+                console.log(message);
+                // Error message level
+                if (messageLevel === 2) {
+                  return reject(message);
+                }
+              }
+            });
 
-        const testFileName = "test-file-upload";
-        let buffer: Buffer;
+            uploadClient.upload({
+              arrayBuffer: fs.readFileSync(updateContentsZipPath),
+              fileName: path.basename(updateContentsZipPath, '.zip'),
+              size: fs.statSync(updateContentsZipPath).size
+              });
+          });
+      }
 
-        let fileStream = fs.createReadStream(updateContentsZipPath);
-        let buffers: any = [];
-        fileStream.on('data', function(buffer: any) {
-          buffers.push(buffer);
-        });
-        fileStream.on('end', () => {
-          var buffer = Buffer.concat(buffers);
-          helper.upload({fileName: testFileName, size: stat.size, arrayBuffer: buffer});
-        });    
-      }); 
+      const downloadBlobUrl = await uploadPromise();
 
-      // await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {
-      //   appVersion: this.targetBinaryVersion,
-      //   description: this.description,
-      //   isDisabled: this.disabled,
-      //   isMandatory: this.mandatory,
-      //   rollout: this.rollout
-      // }, token, serverUrl));
+      await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {
+        appVersion: this.targetBinaryVersion,
+        description: this.description,
+        isDisabled: this.disabled,
+        isMandatory: this.mandatory,
+        rollout: this.rollout
+      }, token, serverUrl));
      
       out.text(`Successfully released an update containing the "${this.updateContentsPath}" `
         + `${fs.lstatSync(this.updateContentsPath).isDirectory() ? "directory" : "file"}`
@@ -144,7 +156,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       debug(`Failed to release a CodePush update - ${inspect(error)}`);
       return failure(ErrorCodes.Exception, error.response ? error.response.body : error);
     } finally {
-      //await pfs.rmDir(updateContentsZipPath);
+      await pfs.rmDir(updateContentsZipPath);
     }
   }
 
