@@ -13,7 +13,7 @@ import { isBinaryOrZip } from "../lib/file-utils";
 import { environments } from "../lib/environment";
 import { isValidRange, isValidRollout, isValidDeployment } from "../lib/validation-utils";
 import { AppCenterCodePushRelease, LegacyCodePushRelease }  from "../lib/release-strategy/index";
-import AcfusClient from "acfus-client";
+import { AcfusClient, IAcfusInitData, IProgress, MessageLevel, IUploadStats } from "acfus-client";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
 
@@ -113,17 +113,17 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
               token: token,
               appName: app.appName,
               ownerName: app.ownerName,
-              onCompleted: (data: any) => {
+              onCompleted: (data: IUploadStats) => {
                 console.log(data.downloadUrl);
                 return resolve(data.downloadUrl);
               },
-              onProgressChanged: (progress: any) => {
+              onProgressChanged: (progress: IProgress) => {
                 console.log(progress.percentCompleted);
               },
-              onMessage: (message: any, messageLevel: any) => {
+              onMessage: (message: string, messageLevel: MessageLevel) => {
                 console.log(message);
                 // Error message level
-                if (messageLevel === 2) {
+                if (messageLevel === MessageLevel.Error) {
                   return reject(message);
                 }
               }
