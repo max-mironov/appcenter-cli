@@ -13,7 +13,7 @@ import { isBinaryOrZip } from "../lib/file-utils";
 import { environments } from "../lib/environment";
 import { isValidRange, isValidRollout, isValidDeployment } from "../lib/validation-utils";
 import { AppCenterCodePushRelease, LegacyCodePushRelease }  from "../lib/release-strategy/index";
-import { AcfusClient, IAcfusInitData, IProgress, MessageLevel, IUploadStats } from "acfus-client";
+import { FileUploadClient, IFileUploadClientSettings, IProgress, MessageLevel, IUploadStats } from "file-upload-client";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
 
@@ -107,12 +107,16 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       const serverUrl = environments(this.environmentName || getUser().environment).managementEndpoint;
       const token = this.token || await getUser().accessToken;
 
+      const httpRequest: any = await out.progress("Creating CodePush release...", clientRequest<models.FileAsset>(
+        (cb) => client.appOperations.postFileAsset(app.ownerName, app.appName, cb)));
+
+      const uploadClientSettings = JSON.parse(httpRequest.response.body);
       const uploadPromise = async () => {
           return new Promise<string>((resolve, reject) => {
-            const uploadClient = new AcfusClient({
-              token: token,
-              appName: app.appName,
-              ownerName: app.ownerName,
+            const uploadClient = new FileUploadClient({
+              asset_id: uploadClientSettings.id,
+              asset_domain: uploadClientSettings.upload_domain,
+              asset_token: uploadClientSettings.token,
               onCompleted: (data: IUploadStats) => {
                 console.log(data.downloadUrl);
                 return resolve(data.downloadUrl);
