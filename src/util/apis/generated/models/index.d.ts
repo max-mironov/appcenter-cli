@@ -4058,6 +4058,9 @@ export interface DistributionStoreWithoutIsLatest {
 export interface ReleaseUploadBeginResponse {
   uploadId: string;
   uploadUrl: string;
+  assetId: string;
+  assetDomain: string;
+  assetToken: string;
 }
 
 /**

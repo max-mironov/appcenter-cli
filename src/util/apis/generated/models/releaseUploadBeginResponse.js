@@ -49,6 +49,27 @@ ReleaseUploadBeginResponse.prototype.mapper = function () {
           type: {
             name: 'String'
           }
+        },
+        assetId: {
+          required: true,
+          serializedName: 'asset_id',
+          type: {
+            name: 'String'
+          }
+        },
+        assetToken: {
+          required: true,
+          serializedName: 'asset_token',
+          type: {
+            name: 'String'
+          }
+        },
+        assetDomain: {
+          required: true,
+          serializedName: 'asset_domain',
+          type: {
+            name: 'String'
+          }
         }
       }
     }

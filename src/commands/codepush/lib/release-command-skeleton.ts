@@ -13,7 +13,7 @@ import { isBinaryOrZip } from "../lib/file-utils";
 import { environments } from "../lib/environment";
 import { isValidRange, isValidRollout, isValidDeployment } from "../lib/validation-utils";
 import { AppCenterCodePushRelease, LegacyCodePushRelease }  from "../lib/release-strategy/index";
-import { FileUploadClient, IFileUploadClientSettings, IProgress, MessageLevel, IUploadStats } from "file-upload-client";
+import FileUploadClient, { IFileUploadClientSettings, MessageLevel, IUploadStats } from "file-upload-client";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
 
@@ -82,7 +82,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
     super(args);
 
     // Сurrently use old service due to we have limitation of 1MB payload limit through bifrost service
-    this.releaseStrategy = new LegacyCodePushRelease(); 
+    this.releaseStrategy = new AppCenterCodePushRelease(); 
   }
   
   public async run(client: AppCenterClient): Promise<CommandResult> {
@@ -108,37 +108,41 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       const token = this.token || await getUser().accessToken;
 
       const httpRequest: any = await out.progress("Creating CodePush release...", clientRequest<models.FileAsset>(
-        (cb) => client.appOperations.postFileAsset(app.ownerName, app.appName, cb)));
+        (cb) => client.releaseUploads.create(app.ownerName, app.appName, cb)));
 
-      const uploadClientSettings = JSON.parse(httpRequest.response.body);
+      let uploadClientSettings: any;
+      try {
+         uploadClientSettings = JSON.parse(httpRequest.response.body);
+      } catch (e) {
+        return failure(ErrorCodes.Exception, "Failed to parse response from server.");
+      }
       const uploadPromise = async () => {
           return new Promise<string>((resolve, reject) => {
-            const uploadClient = new FileUploadClient({
-              asset_id: uploadClientSettings.id,
-              asset_domain: uploadClientSettings.upload_domain,
-              asset_token: uploadClientSettings.token,
-              onCompleted: (data: IUploadStats) => {
-                console.log(data.downloadUrl);
-                return resolve(data.downloadUrl);
-              },
-              onProgressChanged: (progress: IProgress) => {
-                console.log(progress.percentCompleted);
-              },
-              onMessage: (message: string, messageLevel: MessageLevel) => {
-                console.log(message);
-                // Error message level
-                if (messageLevel === MessageLevel.Error) {
-                  return reject(message);
+            try {
+              const uploadClient = new FileUploadClient({
+                asset_id: uploadClientSettings.asset_id,
+                asset_domain: uploadClientSettings.asset_domain,
+                asset_token: uploadClientSettings.asset_token,
+                onCompleted: (data: IUploadStats) => {
+                  console.log(data.downloadUrl);
+                  return resolve(data.downloadUrl);
+                },
+                onMessage: (message: string, messageLevel: MessageLevel) => {
+                  if (messageLevel === MessageLevel.Error) {
+                    return reject(message);
+                  }
                 }
-              }
-            });
-
-            uploadClient.upload({
-              arrayBuffer: fs.readFileSync(updateContentsZipPath),
-              fileName: path.basename(updateContentsZipPath, '.zip'),
-              size: fs.statSync(updateContentsZipPath).size
               });
-          });
+
+              uploadClient.upload({
+                arrayBuffer: fs.readFileSync(updateContentsZipPath),
+                fileName: path.basename(updateContentsZipPath, '.zip'),
+                size: fs.statSync(updateContentsZipPath).size
+              });          
+            } catch (ex) {
+              return reject(ex.message);
+            }
+        });
       }
 
       const downloadBlobUrl = await uploadPromise();
@@ -149,6 +153,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
         isDisabled: this.disabled,
         isMandatory: this.mandatory,
         rollout: this.rollout
+        // blobUrl: downloadBlobUrl TODO: could be added when update swagger for codepush-distribution
       }, token, serverUrl));
      
       out.text(`Successfully released an update containing the "${this.updateContentsPath}" `
