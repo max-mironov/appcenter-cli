@@ -12,20 +12,10 @@ import { sign, zip } from "../lib/update-contents-tasks";
 import { isBinaryOrZip } from "../lib/file-utils";
 import { environments } from "../lib/environment";
 import { isValidRange, isValidRollout, isValidDeployment } from "../lib/validation-utils";
-import { AppCenterCodePushRelease, LegacyCodePushRelease }  from "../lib/release-strategy/index";
-import FileUploadClient, { IFileUploadClientSettings, MessageLevel, IUploadStats } from "file-upload-client";
+import FileUploadClient, { MessageLevel, IUploadStats } from "file-upload-client";
+import { ReleaseUploadBeginResponse } from "../../../util/apis/generated/models/index";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
-
-export interface ReleaseStrategy {
-    release(client: AppCenterClient, app: DefaultApp, deploymentName: string, updateContentsZipPath: string, updateMetadata:{
-      appVersion?: string;
-      description?: string;
-      isDisabled?: boolean;
-      isMandatory?: boolean;
-      rollout?: number;
-    }, token?: string, serverUrl?: string): Promise<void>
-}
 
 export default class CodePushReleaseCommandSkeleton extends AppCommand {
   @help("Deployment to release the update to")
@@ -76,13 +66,8 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
 
   protected targetBinaryVersion: string;
 
-  private readonly releaseStrategy: ReleaseStrategy;
-
   constructor(args: CommandArgs) {
     super(args);
-
-    // Сurrently use old service due to we have limitation of 1MB payload limit through bifrost service
-    this.releaseStrategy = new AppCenterCodePushRelease(); 
   }
   
   public async run(client: AppCenterClient): Promise<CommandResult> {
@@ -104,9 +89,6 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
     const updateContentsZipPath = await zip(this.updateContentsPath);
     try {
       const app = this.app;
-      const serverUrl = environments(this.environmentName || getUser().environment).managementEndpoint;
-      const token = this.token || await getUser().accessToken;
-
       const httpRequest: any = await out.progress("Creating CodePush release...", clientRequest<models.FileAsset>(
         (cb) => client.releaseUploads.create(app.ownerName, app.appName, cb)));
 
@@ -114,22 +96,21 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       try {
          uploadClientSettings = JSON.parse(httpRequest.response.body);
       } catch (e) {
-        return failure(ErrorCodes.Exception, "Failed to parse response from server.");
+        return failure(ErrorCodes.Exception, "Failed to create CodePush release. Failed to parse create_asset response from server.");
       }
       const uploadPromise = async () => {
           return new Promise<string>((resolve, reject) => {
             try {
               const uploadClient = new FileUploadClient({
-                asset_id: uploadClientSettings.asset_id,
-                asset_domain: uploadClientSettings.asset_domain,
-                asset_token: uploadClientSettings.asset_token,
+                assetId: uploadClientSettings.asset_id,
+                assetDomain: uploadClientSettings.asset_domain,
+                assetToken: uploadClientSettings.asset_token,
                 onCompleted: (data: IUploadStats) => {
-                  console.log(data.downloadUrl);
                   return resolve(data.downloadUrl);
                 },
                 onMessage: (message: string, messageLevel: MessageLevel) => {
                   if (messageLevel === MessageLevel.Error) {
-                    return reject(message);
+                    return reject(`Failed to release CodePush update: ${message}`);
                   }
                 }
               });
@@ -140,22 +121,31 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
                 size: fs.statSync(updateContentsZipPath).size
               });          
             } catch (ex) {
-              return reject(ex.message);
+              return reject(`Failed to release CodePush update: ${ex.message}`);
             }
         });
       }
 
-      const downloadBlobUrl = await uploadPromise();
+      const uploadAndRelase = async () => {
+        const downloadBlobUrl = await uploadPromise();
+        await clientRequest<models.CodePushRelease>(
+          (cb) => client.codePushDeploymentReleases.create(
+            this.deploymentName,
+            this.targetBinaryVersion,
+            app.ownerName,
+            app.appName,
+            {
+              deploymentName1: this.deploymentName,
+              description: this.description,
+              disabled: this.disabled, 
+              mandatory: this.mandatory, 
+              rollout: this.rollout,
+              packageParameter: fs.createReadStream(updateContentsZipPath), // TODO: remove this when update codepush-distribution service 
+              // blobUrl: downloadBlobUrl TODO: could be added when update swagger for codepush-distribution
+            }, cb));   
+      }
 
-      await out.progress("Creating CodePush release...",  this.releaseStrategy.release(client, app, this.deploymentName, updateContentsZipPath, {
-        appVersion: this.targetBinaryVersion,
-        description: this.description,
-        isDisabled: this.disabled,
-        isMandatory: this.mandatory,
-        rollout: this.rollout
-        // blobUrl: downloadBlobUrl TODO: could be added when update swagger for codepush-distribution
-      }, token, serverUrl));
-     
+      await out.progress("Creating CodePush release...", uploadAndRelase());
       out.text(`Successfully released an update containing the "${this.updateContentsPath}" `
         + `${fs.lstatSync(this.updateContentsPath).isDirectory() ? "directory" : "file"}`
         + ` to the "${this.deploymentName}" deployment of the "${this.app.appName}" app.`);
