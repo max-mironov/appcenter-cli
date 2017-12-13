@@ -88,17 +88,16 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
 
     const updateContentsZipPath = await zip(this.updateContentsPath);
     try {
-      const app = this.app;
-      const httpRequest: any = await out.progress("Creating CodePush release...", clientRequest<models.FileAsset>(
-        (cb) => client.releaseUploads.create(app.ownerName, app.appName, cb)));
+      const app: DefaultApp = this.app;
+      const httpRequest: any = await clientRequest<models.FileAsset>((cb) => client.releaseUploads.create(app.ownerName, app.appName, cb));
 
       let uploadClientSettings: any;
       try {
          uploadClientSettings = JSON.parse(httpRequest.response.body);
       } catch (e) {
-        return failure(ErrorCodes.Exception, "Failed to create CodePush release. Failed to parse create_asset response from server.");
+        return failure(ErrorCodes.Exception, "Failed to create a CodePush release. Failed to parse create_asset response from server.");
       }
-      const uploadPromise = async () => {
+      const uploadPromise = (): Promise<string> => {
           return new Promise<string>((resolve, reject) => {
             try {
               const uploadClient = new FileUploadClient({
@@ -110,7 +109,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
                 },
                 onMessage: (message: string, messageLevel: MessageLevel) => {
                   if (messageLevel === MessageLevel.Error) {
-                    return reject(`Failed to release CodePush update: ${message}`);
+                    return reject(`Failed to release a CodePush update: ${message}`);
                   }
                 }
               });
@@ -121,13 +120,13 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
                 size: fs.statSync(updateContentsZipPath).size
               });          
             } catch (ex) {
-              return reject(`Failed to release CodePush update: ${ex.message}`);
+              return reject(`Failed to release a CodePush update: ${ex.message}`);
             }
         });
       }
 
       const uploadAndRelase = async () => {
-        const downloadBlobUrl = await uploadPromise();
+        const downloadBlobUrl: string = await uploadPromise();
         await clientRequest<models.CodePushRelease>(
           (cb) => client.codePushDeploymentReleases.create(
             this.deploymentName,
