@@ -12,8 +12,7 @@ import { sign, zip } from "../lib/update-contents-tasks";
 import { isBinaryOrZip } from "../lib/file-utils";
 import { environments } from "../lib/environment";
 import { isValidRange, isValidRollout, isValidDeployment } from "../lib/validation-utils";
-import FileUploadClient, { MessageLevel, IUploadStats } from "file-upload-client";
-import { ReleaseUploadBeginResponse } from "../../../util/apis/generated/models/index";
+import FileUploadClient, { IFileUploadClientSettings, IUploadStats } from "file-upload-client";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-skeleton");
 
@@ -97,36 +96,14 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
       } catch (e) {
         return failure(ErrorCodes.Exception, "Failed to create a CodePush release. Failed to parse create_asset response from server.");
       }
-      const uploadPromise = (): Promise<string> => {
-          return new Promise<string>((resolve, reject) => {
-            try {
-              const uploadClient = new FileUploadClient({
-                assetId: uploadClientSettings.asset_id,
-                assetDomain: uploadClientSettings.asset_domain,
-                assetToken: uploadClientSettings.asset_token,
-                onCompleted: (data: IUploadStats) => {
-                  return resolve(data.downloadUrl);
-                },
-                onMessage: (message: string, messageLevel: MessageLevel) => {
-                  if (messageLevel === MessageLevel.Error) {
-                    return reject(`Failed to release a CodePush update: ${message}`);
-                  }
-                }
-              });
-
-              uploadClient.upload({
-                arrayBuffer: fs.readFileSync(updateContentsZipPath),
-                fileName: path.basename(updateContentsZipPath, '.zip'),
-                size: fs.statSync(updateContentsZipPath).size
-              });          
-            } catch (ex) {
-              return reject(`Failed to release a CodePush update: ${ex.message}`);
-            }
-        });
-      }
 
       const uploadAndRelase = async () => {
-        const downloadBlobUrl: string = await uploadPromise();
+        const uploadedData: IUploadStats = await new FileUploadClient().upload(<IFileUploadClientSettings>{
+          assetId: uploadClientSettings.asset_id,
+          assetDomain: uploadClientSettings.asset_domain,
+          assetToken: uploadClientSettings.asset_token,
+          filePath: updateContentsZipPath
+        });
         await clientRequest<models.CodePushRelease>(
           (cb) => client.codePushDeploymentReleases.create(
             this.deploymentName,
@@ -140,7 +117,7 @@ export default class CodePushReleaseCommandSkeleton extends AppCommand {
               mandatory: this.mandatory, 
               rollout: this.rollout,
               packageParameter: fs.createReadStream(updateContentsZipPath), // TODO: remove this when update codepush-distribution service 
-              // blobUrl: downloadBlobUrl TODO: could be added when update swagger for codepush-distribution
+              // assetId: uploadedData.assetId TODO: could be added when update swagger for codepush-distribution
             }, cb));   
       }
 
